@@ -537,14 +537,28 @@ async function api(action, params){
       method:'POST',
       body: JSON.stringify(body)
     });
-    const data = await res.json();
+    if(!res.ok){
+      console.error('Samoei API HTTP error', res.status, res.statusText);
+      showToast('Server returned HTTP ' + res.status + ' — check deployment settings', 'error');
+      return {success:false, error:'http_'+res.status};
+    }
+    const text = await res.text();
+    let data;
+    try{
+      data = JSON.parse(text);
+    }catch(parseErr){
+      console.error('Samoei API — response was not JSON:', text.substring(0,500));
+      showToast('Backend did not return JSON — likely a deployment/access setting issue (see console)', 'error');
+      return {success:false, error:'bad_response'};
+    }
     if(!data.success && data.error){
       showToast(data.error, 'error');
     }
     return data;
   }catch(err){
-    showToast('Network error — check your connection', 'error');
-    return {success:false, error:'network'};
+    console.error('Samoei API — fetch failed:', err);
+    showToast('Could not reach the server: ' + (err.message||'unknown error'), 'error');
+    return {success:false, error: err.message||'network'};
   }
 }
 
