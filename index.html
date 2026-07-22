@@ -364,12 +364,14 @@ tr:hover td{background:#FAFBFC;}
                   <option value="Arrival">New arrival</option>
                   <option value="Return">Customer return</option>
                   <option value="Damage">Damage / write-off</option>
-                  <option value="Adjustment">Stock count adjustment</option>
+                  <option value="Adjustment">Adjustment (add/subtract)</option>
+                  <option value="Count" id="stockCountOption">Stock count (set exact quantity) — Owner only</option>
                 </select>
               </div>
               <div class="field">
-                <label>Quantity</label>
+                <label id="stockQtyLabel">Quantity</label>
                 <input type="number" id="stockQty" step="any" required placeholder="Use negative for damage/write-off">
+                <div id="stockQtyHint" style="font-size:12px;color:var(--text-mute);margin-top:4px;"></div>
               </div>
               <div class="field full">
                 <label>Supplier (optional)</label>
@@ -497,7 +499,7 @@ tr:hover td{background:#FAFBFC;}
 
 const CONFIG = {
   // Paste your Google Apps Script Web App URL here (ends in /exec)
-  API_URL: 'https://script.google.com/macros/s/AKfycbzvvFO298cIpL63Py8W0yexl-5c16OQNe-ApAr6275NHQANBR7xSYur0cReHA1-93Wx/exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbx5N-SOR1yFpKcgMf1fvoO0ig42LeAmggVEQfRSGJHLSOTygcx_PCMiydEx-a3MWJ0EtA/exec'
 };
 
 const ICONS = {
@@ -650,6 +652,8 @@ async function boot(){
   document.getElementById('avatarInitial').textContent = (SESSION.fullName||'?').charAt(0).toUpperCase();
   document.getElementById('todayChip').textContent = new Date().toLocaleDateString('en-KE', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
   buildNav();
+  const countOpt = document.getElementById('stockCountOption');
+  if(countOpt) countOpt.style.display = SESSION.role === 'Owner' ? '' : 'none';
   switchView(CURRENT_VIEW);
 }
 
@@ -810,6 +814,24 @@ async function loadSales(){
 }
 
 /* ============ STOCK ============ */
+document.getElementById('stockType').addEventListener('change', function(){
+  const hint = document.getElementById('stockQtyHint');
+  const label = document.getElementById('stockQtyLabel');
+  const qtyInput = document.getElementById('stockQty');
+  if(this.value === 'Count'){
+    label.textContent = 'Actual quantity now available';
+    qtyInput.placeholder = 'Total counted in the shop right now';
+    const prodOpt = document.getElementById('stockProduct');
+    const selected = prodOpt.options[prodOpt.selectedIndex];
+    const currentStock = selected && selected.dataset.stock ? selected.dataset.stock : null;
+    hint.textContent = currentStock !== null ? `System currently shows ${fmtNum(currentStock)} ${selected.dataset.unit}. Enter what's actually there.` : 'Select a product to see the current system quantity.';
+  } else {
+    label.textContent = 'Quantity';
+    qtyInput.placeholder = 'Use negative for damage/write-off';
+    hint.textContent = '';
+  }
+});
+
 document.getElementById('stockForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const btn = document.getElementById('stockSubmitBtn');
@@ -824,8 +846,14 @@ document.getElementById('stockForm').addEventListener('submit', async (e)=>{
   });
   btn.disabled = false; btn.textContent = 'Save stock movement';
   if(data.success){
-    showToast('Stock updated — new balance: ' + fmtNum(data.newStock), 'success');
+    if(data.noChange){
+      showToast('No change — count matches the system already', 'success');
+    } else {
+      showToast('Stock updated — new balance: ' + fmtNum(data.newStock), 'success');
+    }
     e.target.reset();
+    document.getElementById('stockQtyLabel').textContent = 'Quantity';
+    document.getElementById('stockQtyHint').textContent = '';
     await loadProducts();
     populateProductSelect('stockProduct'); populateProductSelect('saleProduct');
     renderStockLevels(); loadMovements();
